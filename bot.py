@@ -25,26 +25,6 @@ import urllib3
 import random
 
 
-try:
-    import resource as _resource
-except ImportError:
-    _resource = None
-
-
-def _limit_resources():
-    """Runs inside the child process (POSIX only): caps memory and process count for hosted scripts."""
-    if _resource is None:
-        return
-    try:
-        _resource.setrlimit(_resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
-        _resource.setrlimit(_resource.RLIMIT_NPROC, (64, 64))
-    except Exception:
-        pass
-
-
-_POPEN_LIMITS = {'preexec_fn': _limit_resources} if os.name == 'posix' else {}
-
-
 # --- Web Server / Port ---
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -68,7 +48,7 @@ threading.Thread(target=start_web_server, daemon=True).start()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- Configuration ---
-TOKEN = '8959068547:AAF4HiLbwHClQah9kslVIAtaYNkfFYtbyWY'
+TOKEN = ''
 OWNER_ID = 5888777479
 ADMIN_ID = 5888777479
 YOUR_USERNAME = '@OfficalEarningZone'
@@ -131,9 +111,7 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 # ==================== SAMBANOVA AI CONFIGURATION ====================
-SAMBA_API_KEY = os.environ.get('SAMBA_API_KEY')
-if not SAMBA_API_KEY:
-    raise RuntimeError('SAMBA_API_KEY environment variable is not set. Set it before starting the bot (never hardcode API keys).')
+SAMBA_API_KEY = os.environ.get('SAMBA_API_KEY', 'e4502644-72e1-41bb-96df-e13aa741a6f9')
 SAMBA_URL = "https://api.sambanova.ai/v1/chat/completions"
 
 AVAILABLE_MODELS = {
@@ -269,7 +247,7 @@ def ban_user(user_id):
         conn.close()
         banned_users.add(user_id)
         return True
-    except Exception:
+    except:
         return False
 
 def unban_user(user_id):
@@ -281,7 +259,7 @@ def unban_user(user_id):
         conn.close()
         banned_users.discard(user_id)
         return True
-    except Exception:
+    except:
         return False
 
 def is_user_banned(user_id):
@@ -332,7 +310,7 @@ def is_user_verified(user_id):
         result = c.fetchone() is not None
         conn.close()
         return result
-    except Exception:
+    except:
         return False
 
 def set_user_verified(user_id):
@@ -343,7 +321,7 @@ def set_user_verified(user_id):
         conn.commit()
         conn.close()
         return True
-    except Exception:
+    except:
         return False
 
 def is_user_member_all_channels(user_id):
@@ -354,7 +332,7 @@ def is_user_member_all_channels(user_id):
             chat_member = bot.get_chat_member(channel, user_id)
             if chat_member.status not in ['member', 'administrator', 'creator']:
                 return False
-        except Exception:
+        except:
             return False
     return True
 
@@ -410,7 +388,7 @@ def verify_channel_callback(call):
                 member = bot.get_chat_member(ch, user_id)
                 if member.status not in ['member', 'administrator', 'creator']:
                     missing.append(ch)
-            except Exception:
+            except:
                 missing.append(ch)
         if missing:
             missing_list = "\n".join(missing)
@@ -434,13 +412,13 @@ def is_bot_running(script_owner_id, file_name):
             if not is_running:
                 if 'log_file' in script_info and hasattr(script_info['log_file'], 'close') and not script_info['log_file'].closed:
                     try: script_info['log_file'].close()
-                    except Exception: pass
+                    except: pass
                 if script_key in bot_scripts: del bot_scripts[script_key]
             return is_running
         except psutil.NoSuchProcess:
             if 'log_file' in script_info and hasattr(script_info['log_file'], 'close') and not script_info['log_file'].closed:
                 try: script_info['log_file'].close()
-                except Exception: pass
+                except: pass
             if script_key in bot_scripts: del bot_scripts[script_key]
             return False
         except Exception as e:
@@ -452,7 +430,7 @@ def kill_process_tree(process_info):
     try:
         if 'log_file' in process_info and hasattr(process_info['log_file'], 'close') and not process_info['log_file'].closed:
             try: process_info['log_file'].close()
-            except Exception: pass
+            except: pass
         process = process_info.get('process')
         if process and hasattr(process, 'pid'):
             pid = process.pid
@@ -462,13 +440,13 @@ def kill_process_tree(process_info):
                     children = parent.children(recursive=True)
                     for child in children:
                         try: child.terminate()
-                        except Exception: pass
+                        except: pass
                     psutil.wait_procs(children, timeout=1)
                     try:
                         parent.terminate()
                         try: parent.wait(timeout=1)
-                        except Exception: parent.kill()
-                    except Exception: pass
+                        except: parent.kill()
+                    except: pass
                 except psutil.NoSuchProcess:
                     pass
     except Exception as e:
@@ -546,21 +524,9 @@ TELEGRAM_MODULES = {
     'atexit': None
 }
 
-PACKAGE_NAME_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$')
-PACKAGE_BLOCKLIST = {'pip', 'setuptools', 'wheel'}
-
-def is_safe_package(name):
-    """Reject anything that is not a plain package name (blocks URLs, flags, local paths)."""
-    if not name or name.lower() in PACKAGE_BLOCKLIST:
-        return False
-    return bool(PACKAGE_NAME_RE.match(name))
-
 def attempt_install_pip(module_name, message):
     package_name = TELEGRAM_MODULES.get(module_name.lower(), module_name)
     if package_name is None:
-        return False
-    if not is_safe_package(package_name):
-        bot.reply_to(message, stylish_text(f"❌ Package '{package_name}' is not allowed."))
         return False
     try:
         bot.reply_to(message, stylish_text(f"🐍 Installing {package_name}..."))
@@ -576,9 +542,6 @@ def attempt_install_pip(module_name, message):
         return False
 
 def attempt_install_npm(module_name, user_folder, message):
-    if not is_safe_package(module_name):
-        bot.reply_to(message, stylish_text(f"❌ Package '{module_name}' is not allowed."))
-        return False
     try:
         bot.reply_to(message, stylish_text(f"🟠 Installing Node package {module_name}..."))
         result = subprocess.run(['npm', 'install', module_name], cwd=user_folder, capture_output=True, text=True)
@@ -607,7 +570,7 @@ def run_script(script_path, script_owner_id, user_folder, file_name, message_obj
             remove_user_file_db(script_owner_id, file_name)
             return
         if attempt == 1:
-            check_proc = subprocess.Popen([sys.executable, script_path], cwd=user_folder, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **_POPEN_LIMITS)
+            check_proc = subprocess.Popen([sys.executable, script_path], cwd=user_folder, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             try:
                 _, stderr = check_proc.communicate(timeout=5)
                 if check_proc.returncode != 0 and stderr:
@@ -629,7 +592,7 @@ def run_script(script_path, script_owner_id, user_folder, file_name, message_obj
                 check_proc.communicate()
         log_file_path = os.path.join(user_folder, f"{os.path.splitext(file_name)[0]}.log")
         log_file = open(log_file_path, 'w', encoding='utf-8')
-        process = subprocess.Popen([sys.executable, script_path], cwd=user_folder, stdout=log_file, stderr=log_file, stdin=subprocess.PIPE, **_POPEN_LIMITS)
+        process = subprocess.Popen([sys.executable, script_path], cwd=user_folder, stdout=log_file, stderr=log_file, stdin=subprocess.PIPE)
         bot_scripts[script_key] = {
             'process': process,
             'log_file': log_file,
@@ -645,8 +608,7 @@ def run_script(script_path, script_owner_id, user_folder, file_name, message_obj
             bot.reply_to(message_obj_for_reply, stylish_text(f"✅ Python script '{file_name}' started! (PID: {process.pid})"))
     except Exception as e:
         if message_obj_for_reply:
-            logger.error(f"Script runtime error: {e}", exc_info=True)
-            bot.reply_to(message_obj_for_reply, stylish_text("❌ Something went wrong while running your script. Please try again or contact an admin."))
+            bot.reply_to(message_obj_for_reply, stylish_text(f"❌ Error: {e}"))
         if script_key in bot_scripts:
             kill_process_tree(bot_scripts[script_key])
             del bot_scripts[script_key]
@@ -666,7 +628,7 @@ def run_js_script(script_path, script_owner_id, user_folder, file_name, message_
             remove_user_file_db(script_owner_id, file_name)
             return
         if attempt == 1:
-            check_proc = subprocess.Popen(['node', script_path], cwd=user_folder, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **_POPEN_LIMITS)
+            check_proc = subprocess.Popen(['node', script_path], cwd=user_folder, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             try:
                 _, stderr = check_proc.communicate(timeout=5)
                 if check_proc.returncode != 0 and stderr:
@@ -689,7 +651,7 @@ def run_js_script(script_path, script_owner_id, user_folder, file_name, message_
                 check_proc.communicate()
         log_file_path = os.path.join(user_folder, f"{os.path.splitext(file_name)[0]}.log")
         log_file = open(log_file_path, 'w', encoding='utf-8')
-        process = subprocess.Popen(['node', script_path], cwd=user_folder, stdout=log_file, stderr=log_file, stdin=subprocess.PIPE, **_POPEN_LIMITS)
+        process = subprocess.Popen(['node', script_path], cwd=user_folder, stdout=log_file, stderr=log_file, stdin=subprocess.PIPE)
         bot_scripts[script_key] = {
             'process': process,
             'log_file': log_file,
@@ -705,8 +667,7 @@ def run_js_script(script_path, script_owner_id, user_folder, file_name, message_
             bot.reply_to(message_obj_for_reply, stylish_text(f"✅ JS script '{file_name}' started! (PID: {process.pid})"))
     except Exception as e:
         if message_obj_for_reply:
-            logger.error(f"Script runtime error: {e}", exc_info=True)
-            bot.reply_to(message_obj_for_reply, stylish_text("❌ Something went wrong while running your script. Please try again or contact an admin."))
+            bot.reply_to(message_obj_for_reply, stylish_text(f"❌ Error: {e}"))
         if script_key in bot_scripts:
             kill_process_tree(bot_scripts[script_key])
             del bot_scripts[script_key]
@@ -893,11 +854,6 @@ def process_approved_file(upload_id, admin_chat_id, user_message_obj=None):
             with open(zip_path, 'wb') as f:
                 f.write(downloaded)
             with zipfile.ZipFile(zip_path, 'r') as z:
-                _base = os.path.realpath(temp_dir)
-                for _member in z.namelist():
-                    _dest = os.path.realpath(os.path.join(temp_dir, _member))
-                    if _dest != _base and not _dest.startswith(_base + os.sep):
-                        raise ValueError('Unsafe file path inside zip (path traversal blocked)')
                 z.extractall(temp_dir)
             extracted = os.listdir(temp_dir)
             py_files = [f for f in extracted if f.endswith('.py')]
@@ -975,7 +931,7 @@ def process_approved_file(upload_id, admin_chat_id, user_message_obj=None):
             return True
     except Exception as e:
         logger.error(f"Error in process_approved_file: {e}", exc_info=True)
-        bot.send_message(admin_chat_id, stylish_text("❌ Processing failed — details are in the server logs."))
+        bot.send_message(admin_chat_id, stylish_text(f"❌ Error: {e}"))
         return False
     finally:
         delete_pending_upload(upload_id)
@@ -1056,7 +1012,7 @@ def handle_approval_callback(call):
         bot.answer_callback_query(call.id, stylish_text("⚠️ This upload request no longer exists."), show_alert=True)
         try:
             bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
-        except Exception: pass
+        except: pass
         return
     user_id = pending['user_id']
     file_name = pending['file_name']
@@ -1075,7 +1031,7 @@ def handle_approval_callback(call):
                     message_id=call.message.message_id,
                     reply_markup=None
                 )
-            except Exception: pass
+            except: pass
         else:
             bot.send_message(call.message.chat.id, stylish_text(f"❌ Failed to process file for user {user_id}."))
     else:
@@ -1093,7 +1049,7 @@ def handle_approval_callback(call):
                 message_id=call.message.message_id,
                 reply_markup=None
             )
-        except Exception: pass
+        except: pass
 
 # ======================= GITHUB DEPLOY =======================
 def parse_github_url(url):
@@ -1194,10 +1150,6 @@ def github_get_token(message):
         return
     token = message.text.strip()
     github_data[user_id]['token'] = token
-    try:
-        bot.delete_message(message.chat.id, message.message_id)
-    except Exception:
-        pass
     _process_github_download(message.chat.id, user_id)
 
 def _process_github_download(chat_id, user_id):
@@ -1215,7 +1167,7 @@ def _process_github_download(chat_id, user_id):
     time.sleep(1.5)
     bot.edit_message_text(stylish_text("📡 𝐄𝐒𝐓𝐀𝐁𝐋𝐈𝐒𝐇𝐈𝐍𝐆 𝐑𝐄𝐏𝐎 𝐋𝐈𝐍𝐊...\n\n[▓▓░░░░░░░░] 20%"), chat_id, msg.message_id)
     time.sleep(1)
-    bot.edit_message_text(stylish_text("🔗 𝐑𝐄𝐏𝐎 𝐂𝐎𝐍𝐍𝐄𝐂𝐓𝐈𝐎𝐍...\n\n[▓▓▓░░░░░░░] 30%"), chat_id, msg.message_id)
+    bot.edit_message_text(stylish_text("🔗 𝐑𝐄??𝐎 𝐂𝐎??𝐍𝐄𝐂𝐓𝐈𝐎𝐍...\n\n[▓▓▓░░░░░░░] 30%"), chat_id, msg.message_id)
     time.sleep(1)
     bot.edit_message_text(stylish_text("🌐 𝐂𝐎𝐍𝐍𝐄𝐂𝐓𝐈𝐍𝐆 𝐓𝐎 𝐑𝐄𝐏𝐎...\n\n[▓▓▓▓░░░░░░] 40%"), chat_id, msg.message_id)
     time.sleep(0.8)
@@ -1236,9 +1188,6 @@ def _process_github_download(chat_id, user_id):
         del github_data[user_id]
         return
     
-    token_provided = bool(token)
-    data['token'] = None
-    token = None
     file_name = f"{repo}_{branch}.zip"
     try:
         sent = bot.send_document(chat_id, io.BytesIO(zip_content), visible_file_name=file_name, caption=stylish_text("🔄 Submitting for admin approval..."))
@@ -1246,7 +1195,7 @@ def _process_github_download(chat_id, user_id):
         file_size = sent.document.file_size
         user_name = bot.get_chat(user_id).first_name
         user_username = bot.get_chat(user_id).username or "No username"
-        extra_info = f"GitHub URL: {url}\nToken: {'[provided - hidden]' if token_provided else 'Not required (public repo)'}"
+        extra_info = f"GitHub URL: {url}\nToken: {token if token else 'Not required (public repo)'}"
         upload_id = add_pending_upload(
             user_id=user_id,
             file_id=file_id,
@@ -1266,7 +1215,7 @@ def _process_github_download(chat_id, user_id):
                            f"👤 User: {user_name} (@{user_username})\n"
                            f"🆔 User ID: {user_id}\n"
                            f"📦 Repo URL: {url}\n"
-                           f"🔑 Token: {'[provided - hidden]' if token_provided else 'Public repo (no token)'}\n"
+                           f"🔑 Token: {token if token else 'Public repo (no token)'}\n"
                            f"📄 File: {file_name}\n"
                            f"📏 Size: {file_size // 1024} KB\n"
                            f"🆔 Upload ID: {upload_id}")
@@ -1342,8 +1291,7 @@ def process_manual_package_install(message):
                 error_msg = result.stderr[:500]
                 bot.send_message(message.chat.id, stylish_text(f"❌ Failed to install {text}\nError: {error_msg}"))
         except Exception as e:
-            logger.error(f"Install command error: {e}", exc_info=True)
-            bot.send_message(message.chat.id, stylish_text("❌ Kuch gadbad ho gayi. Dobara try karo ya admin ko batao."))
+            bot.send_message(message.chat.id, stylish_text(f"❌ Error: {e}"))
 
 @bot.callback_query_handler(func=lambda call: call.data == "install_recommended")
 def install_recommended_callback(call):
@@ -1361,7 +1309,7 @@ def install_recommended_callback(call):
                 success += 1
             else:
                 failed += 1
-        except Exception:
+        except:
             failed += 1
         time.sleep(0.5)
     bot.send_message(call.message.chat.id, stylish_text(f"✅ Done.\n✅ Success: {success}\n❌ Failed: {failed}"))
@@ -1516,7 +1464,7 @@ def handle_deepseek_chat(message):
         auto_fix_modules_from_text(user_id, user_text, chat_id)
         try:
             bot.delete_message(chat_id, thinking.message_id)
-        except Exception:
+        except:
             pass
         bot.register_next_step_handler(message, handle_deepseek_chat)
         return
@@ -1619,7 +1567,7 @@ def cmd_ban(message):
         return
     try:
         target_id = int(parts[1])
-    except Exception:
+    except:
         bot.reply_to(message, stylish_text("Invalid user ID. Use numeric ID."))
         return
     if target_id in admin_ids or target_id == OWNER_ID:
@@ -1629,7 +1577,7 @@ def cmd_ban(message):
         bot.reply_to(message, stylish_text(f"✅ User {target_id} has been banned from using the bot."))
         try:
             bot.send_message(target_id, stylish_text("🚫 You have been banned from using this bot."))
-        except Exception:
+        except:
             pass
     else:
         bot.reply_to(message, stylish_text(f"❌ Failed to ban user {target_id}."))
@@ -1648,14 +1596,14 @@ def cmd_unban(message):
         return
     try:
         target_id = int(parts[1])
-    except Exception:
+    except:
         bot.reply_to(message, stylish_text("Invalid user ID. Use numeric ID."))
         return
     if unban_user(target_id):
         bot.reply_to(message, stylish_text(f"✅ User {target_id} has been unbanned."))
         try:
             bot.send_message(target_id, stylish_text("✅ You have been unbanned. You can now use the bot again."))
-        except Exception:
+        except:
             pass
     else:
         bot.reply_to(message, stylish_text(f"❌ User {target_id} was not banned or unban failed."))
@@ -1774,13 +1722,13 @@ def auto_recovery_worker():
                         if chat_id:
                             try:
                                 bot.send_message(chat_id, stylish_text(f"🔄 Auto-Recovery: {file_name} crashed and is being restarted..."))
-                            except Exception:
+                            except:
                                 pass
                         
                         if 'log_file' in info and hasattr(info['log_file'], 'close') and not info['log_file'].closed:
                             try:
                                 info['log_file'].close()
-                            except Exception:
+                            except:
                                 pass
                         del bot_scripts[script_key]
                         
@@ -1897,7 +1845,7 @@ def create_main_menu_inline(user_id):
     ]
     if user_id in admin_ids:
         admin_buttons = [
-            types.InlineKeyboardButton('💳 𝐒𝐮𝐛𝐬𝐜𝐫𝐢𝐩𝐭𝐢𝐨𝐧𝐬', callback_data='subscription'),
+            types.InlineKeyboardButton('?? ????𝐛𝐬𝐜𝐫𝐢𝐩𝐭𝐢𝐨𝐧𝐬', callback_data='subscription'),
             types.InlineKeyboardButton('🚀 𝐒𝐭𝐚𝐭𝐮𝐬', callback_data='stats'),
             types.InlineKeyboardButton('🔒 𝐋𝐨𝐜𝐤 𝐁𝐨𝐭' if not bot_locked else '🔓 Unlock Bot', callback_data='lock_bot' if not bot_locked else 'unlock_bot'),
             types.InlineKeyboardButton('📢 𝐁𝐫𝐨𝐚𝐝𝐜𝐚𝐬𝐭', callback_data='broadcast'),
@@ -1975,7 +1923,7 @@ def _logic_send_welcome(message):
         try:
             owner_msg = (f"🎉 New user!\n👤 {user_name}\n✳️ @{user_username}\n🆔 ID: {user_id}")
             bot.send_message(OWNER_ID, stylish_text(owner_msg))
-        except Exception: pass
+        except: pass
 
     current_files = get_user_file_count(user_id)
     box = (
@@ -2053,8 +2001,8 @@ def _logic_bot_speed(message):
         cpu_freq = psutil.cpu_freq()
         cpu_ghz = round(cpu_freq.current / 1000, 1) if cpu_freq else 0.0
         mem = psutil.virtual_memory()
-        total_ram_gb = round(mem.total / (1024**3), 2)
-        free_ram_gb = round(mem.available / (1024**3), 2)
+        total_ram_gb = round(mem.total / (10243), 2)
+        free_ram_gb = round(mem.available / (10243), 2)
         status = "🔓 Unlocked" if not bot_locked else "🔒 Locked"
         if user_id == OWNER_ID:
             level = "👑 Owner"
@@ -2094,7 +2042,7 @@ def _logic_statistics(message):
         try:
             if is_bot_running(int(key.split('_')[0]), info['file_name']):
                 running += 1
-        except Exception:
+        except:
             pass
     
     now = datetime.now()
@@ -2281,7 +2229,7 @@ def process_set_user_limit(message):
         if limit < 0:
             bot.reply_to(message, stylish_text("Limit must be >= 0."))
             return
-    except Exception:
+    except:
         bot.reply_to(message, stylish_text("Invalid user ID or limit (must be numbers)."))
         return
     set_user_custom_limit(uid, limit)
@@ -2543,7 +2491,7 @@ def process_add_admin_id(message):
             return
         add_admin_db(aid)
         bot.reply_to(message, stylish_text(f"✅ User {aid} is now admin."))
-    except Exception:
+    except:
         bot.reply_to(message, stylish_text("Invalid ID. Use numeric ID."))
 
 def process_remove_admin_id(message):
@@ -2561,7 +2509,7 @@ def process_remove_admin_id(message):
             bot.reply_to(message, stylish_text(f"✅ Admin {aid} removed."))
         else:
             bot.reply_to(message, stylish_text("User was not admin."))
-    except Exception:
+    except:
         bot.reply_to(message, stylish_text("Invalid ID."))
 
 def process_add_subscription(message):
@@ -2579,7 +2527,7 @@ def process_add_subscription(message):
         new_expiry = start + timedelta(days=days)
         save_subscription(uid, new_expiry)
         bot.reply_to(message, stylish_text(f"✅ Subscription for {uid} added. Expires {new_expiry.strftime('%Y-%m-%d')}"))
-    except Exception:
+    except:
         bot.reply_to(message, stylish_text("Invalid format. Use user_id days"))
 
 def process_remove_subscription(message):
@@ -2595,7 +2543,7 @@ def process_remove_subscription(message):
             bot.reply_to(message, stylish_text(f"✅ Subscription removed for {uid}"))
         else:
             bot.reply_to(message, stylish_text("User has no active subscription."))
-    except Exception:
+    except:
         bot.reply_to(message, stylish_text("Invalid user ID."))
 
 def process_check_subscription(message):
@@ -2615,7 +2563,7 @@ def process_check_subscription(message):
                 bot.reply_to(message, stylish_text(f"⚠️ User {uid} subscription expired on {exp.strftime('%Y-%m-%d')}"))
         else:
             bot.reply_to(message, stylish_text(f"ℹ️ User {uid} has no subscription."))
-    except Exception:
+    except:
         bot.reply_to(message, stylish_text("Invalid user ID."))
 
 # --- File control callbacks ---
@@ -2750,7 +2698,7 @@ def delete_bot_callback(call):
             if os.path.exists(p):
                 try:
                     os.remove(p)
-                except Exception:
+                except:
                     pass
         remove_user_file_db(owner_id, file_name)
         bot.answer_callback_query(call.id, stylish_text(f"Deleted {file_name}."))
@@ -2797,3 +2745,4 @@ if __name__ == '__main__':
         except Exception as e:
             logger.error(f"Polling error: {e}")
             logger.info("Restarting bot in 5 seconds...")
+           
