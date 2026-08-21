@@ -3725,15 +3725,6 @@ def reconcile_command(message):
         except Exception:bot_scripts.pop(k,None);removed+=1
     audit(message.from_user.id,'process_reconcile',details=str(removed));bot.reply_to(message,f'🔄 <b>Runtime reconciled.</b> Removed stale entries: {removed}',parse_mode='HTML')
 
-# Make process shutdown more robust at interpreter exit.
-_original_cleanup=cleanup
-def cleanup():
-    for k,i in list(bot_scripts.items()):
-        try:kill_process_tree_hardened(i)
-        except Exception:pass
-    try:_original_cleanup()
-    except Exception:pass
-
 # ======================= END RELIABILITY PACK ===============================
 
 
@@ -3759,11 +3750,24 @@ def redact_secrets(text):
 # ======================== END FINAL HARDENING ===============================
 
 # --- Cleanup and Main ---
+_CLEANUP_LOCK = threading.Lock()
+_CLEANUP_DONE = False
+
 def cleanup():
+    global _CLEANUP_DONE
+    with _CLEANUP_LOCK:
+        if _CLEANUP_DONE:
+            return
+        _CLEANUP_DONE = True
+
     logger.warning("Shutting down, killing all scripts...")
     for key, info in list(bot_scripts.items()):
-        kill_process_tree(info)
+        try:
+            kill_process_tree(info)
+        except Exception:
+            logger.exception("Failed to clean up process %s", key)
     logger.warning("Cleanup done.")
+
 atexit.register(cleanup)
 
 # ======================= SELF‑RESTART MAIN LOOP =======================
@@ -3772,8 +3776,9 @@ if __name__ == '__main__':
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=30)
         except Exception as e:
-            logger.error(f"Polling error: {e}")
+            logger.exception("Polling error")
             logger.info("Restarting bot in 5 seconds...")
+            time.sleep(5)
            
 
 # ============================ DEPLOYMENT MANIFEST ===========================
