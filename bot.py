@@ -48,7 +48,7 @@ threading.Thread(target=start_web_server, daemon=True).start()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- Configuration ---
-TOKEN = '8959068547:AAF4HiLbwHClQah9kslVIAtaYNkfFYtbyWY'
+TOKEN = ''
 OWNER_ID = 5888777479
 ADMIN_ID = 5888777479
 YOUR_USERNAME = '@OfficalEarningZone'
